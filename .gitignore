@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+*.db
+*.log
+
+certs/server.key
+certs/server.crt
+
+.vscode/
+.DS_Store
