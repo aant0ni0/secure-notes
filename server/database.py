@@ -18,7 +18,7 @@ def hash_password(password):
 
 def init_db():
     """
-    Tworzy tabele users oraz notes.
+    Tworzy tabele users, notes oraz sessions.
     """
     conn = get_connection()
     cursor = conn.cursor()
@@ -41,6 +41,16 @@ def init_db():
             FOREIGN KEY (username) REFERENCES users(username)
         )
     """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sessions (
+            token TEXT PRIMARY KEY,
+            username TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (username) REFERENCES users(username)
+        )
+    """)
+    # ---------------------------
 
     conn.commit()
     conn.close()
@@ -166,6 +176,43 @@ def delete_note(username, note_id):
     conn.close()
 
     return deleted > 0
+
+
+def create_session(username, token):
+    """
+    Zapisuje nowy token sesyjny w bazie danych.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "INSERT INTO sessions (token, username) VALUES (?, ?)",
+        (token, username)
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def get_username_by_token(token):
+    """
+    Sprawdza, czy token istnieje w bazie i zwraca przypisanego użytkownika.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT username FROM sessions WHERE token = ?",
+        (token,)
+    )
+
+    row = cursor.fetchone()
+    conn.close()
+
+    if row is None:
+        return None
+
+    return row[0]
 
 
 if __name__ == "__main__":

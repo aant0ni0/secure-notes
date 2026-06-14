@@ -23,7 +23,9 @@ from database import (
     verify_user,
     add_note,
     list_notes,
-    delete_note
+    delete_note,
+    create_session,
+    get_username_by_token
 )
 
 
@@ -33,8 +35,6 @@ PORT = 8443
 CERT_FILE = "certs/server.crt"
 KEY_FILE = "certs/server.key"
 
-sessions = {}
-
 
 def send_response(conn, message):
     conn.sendall(encode_message(message))
@@ -43,7 +43,7 @@ def send_response(conn, message):
 def get_username_from_token(token):
     if not token:
         return None
-    return sessions.get(token)
+    return get_username_by_token(token)
 
 
 def handle_hello(conn):
@@ -77,7 +77,8 @@ def handle_auth(conn, payload):
 
     if verify_user(username, password):
         token = secrets.token_hex(32)
-        sessions[token] = username
+
+        create_session(username, token)
 
         send_response(conn, create_message(
             "AUTH_ACK",
