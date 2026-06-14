@@ -96,111 +96,110 @@ def main():
 
                         choice = input("Choose option: ")
 
-                if choice == "1":
-                    username = input("Username: ")
-                    password = input("Password: ")
+                        # POPRAWA: Wszystkie poniższe warunki muszą być przesunięte w prawo,
+                        # aby znajdowały się wewnątrz pętli while.
+                        if choice == "1":
+                            username = input("Username: ")
+                            password = input("Password: ")
 
-                    response = send_message(conn, create_message(
-                        "REGISTER",
-                        {
-                            "username": username,
-                            "password": password
-                        }
-                    ))
-                    print_response(response)
+                            response = send_message(conn, create_message(
+                                "REGISTER",
+                                {
+                                    "username": username,
+                                    "password": password
+                                }
+                            ))
+                            print_response(response)
 
-                elif choice == "2":
-                    username = input("Username: ")
-                    password = input("Password: ")
+                        elif choice == "2":
+                            username = input("Username: ")
+                            password = input("Password: ")
 
-                    response = send_message(conn, create_message(
-                        "AUTH",
-                        {
-                            "username": username,
-                            "password": password
-                        }
-                    ))
+                            response = send_message(conn, create_message(
+                                "AUTH",
+                                {
+                                    "username": username,
+                                    "password": password
+                                }
+                            ))
 
-                    if response and response.get("type") == "AUTH_ACK":
-                        session_token = response["payload"]["session_token"]
-                        print("Zalogowano poprawnie.")
-                    else:
-                        print_response(response)
+                            if response and response.get("type") == "AUTH_ACK":
+                                session_token = response["payload"]["session_token"]
+                                print("Zalogowano poprawnie.")
+                            else:
+                                print_response(response)
 
-                elif choice == "3":
-                    if not session_token:
-                        print("Najpierw się zaloguj.")
-                        continue
+                        elif choice == "3":
+                            if not session_token:
+                                print("Najpierw się zaloguj.")
+                                continue
 
-                    title = input("Title: ")
-                    content = input("Content: ")
+                            title = input("Title: ")
+                            content = input("Content: ")
 
-                    response = send_message(conn, create_message(
-                        "ADD_NOTE",
-                        {
-                            "title": title,
-                            "content": content
-                        },
-                        session_token=session_token
-                    ))
-                    print_response(response)
+                            response = send_message(conn, create_message(
+                                "ADD_NOTE",
+                                {
+                                    "title": title,
+                                    "content": content
+                                },
+                                session_token=session_token
+                            ))
+                            print_response(response)
 
-                elif choice == "4":
-                    if not session_token:
-                        print("Najpierw się zaloguj.")
-                        continue
+                        elif choice == "4":
+                            if not session_token:
+                                print("Najpierw się zaloguj.")
+                                continue
 
-                    response = send_message(conn, create_message(
-                        "LIST_NOTES",
-                        {},
-                        session_token=session_token
-                    ))
+                            response = send_message(conn, create_message(
+                                "LIST_NOTES",
+                                {},
+                                session_token=session_token
+                            ))
 
-                    if response and response.get("type") == "SUCCESS":
-                        notes = response["payload"].get("notes", [])
+                            if response and response.get("type") == "SUCCESS":
+                                notes = response["payload"].get("notes", [])
 
-                        if not notes:
-                            print("Brak notatek.")
+                                if not notes:
+                                    print("Brak notatek.")
+                                else:
+                                    print("\nTwoje notatki:")
+                                    for note in notes:
+                                        print(f"\nID: {note['id']}")
+                                        print(f"Tytuł: {note['title']}")
+                                        print(f"Treść: {note['content']}")
+                                        print(f"Data: {note['created_at']}")
+                            else:
+                                print_response(response)
+
+                        elif choice == "5":
+                            if not session_token:
+                                print("Najpierw się zaloguj.")
+                                continue
+
+                            note_id = input("Note ID to delete: ")
+
+                            response = send_message(conn, create_message(
+                                "DELETE_NOTE",
+                                {
+                                    "note_id": note_id
+                                },
+                                session_token=session_token
+                            ))
+                            print_response(response)
+
+                        elif choice == "6":
+                            response = send_message(conn, create_message(
+                                "BYE",
+                                session_token=session_token
+                            ))
+                            print_response(response)
+                            print("Koniec.")
+                            return
+
                         else:
-                            print("\nTwoje notatki:")
-                            for note in notes:
-                                print(f"\nID: {note['id']}")
-                                print(f"Tytuł: {note['title']}")
-                                print(f"Treść: {note['content']}")
-                                print(f"Data: {note['created_at']}")
-                    else:
-                        print_response(response)
-
-                elif choice == "5":
-                    if not session_token:
-                        print("Najpierw się zaloguj.")
-                        continue
-
-                    note_id = input("Note ID to delete: ")
-
-                    response = send_message(conn, create_message(
-                        "DELETE_NOTE",
-                        {
-                            "note_id": note_id
-                        },
-                        session_token=session_token
-                    ))
-                    print_response(response)
-
-
-
-                elif choice == "6":
-                    response = send_message(conn, create_message(
-                        "BYE",
-                        session_token=session_token
-
-                    ))
-                    print_response(response)
-                    print("Koniec.")
-                    return
-
-                else:
-                    print("Nieznana opcja.")
+                            print("Nieznana opcja.")
 
         except (ConnectionError, ConnectionRefusedError) as e:
             print(f"\n[BŁĄD SIECI] {e}")
