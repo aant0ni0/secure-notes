@@ -6,6 +6,7 @@ import os
 import signal
 import threading
 import logging
+import time
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -44,6 +45,12 @@ PORT = 8443
 CERT_FILE = "certs/server.crt"
 KEY_FILE = "certs/server.key"
 
+# --- KONFIGURACJA RATE LIMITINGU ---
+MAX_FAILED_ATTEMPTS = 5
+LOCKOUT_WINDOW = 60
+
+failed_attempts = {}
+rate_limit_lock = threading.Lock()
 
 def send_response(conn, message):
     conn.sendall(encode_message(message))
@@ -76,9 +83,24 @@ def handle_register(conn, payload):
         send_response(conn, create_error(100, "Username already exists"))
 
 
-def handle_auth(conn, payload):
+def handle_auth(conn, payload, addr):
     username = payload.get("username")
     password = payload.get("password")
+    ip_address = addr[0]
+    current_time = time.time()
+
+    with rate_limit_lock:
+        if ip_address in failed_attempts:
+            record = failed_attempts[ip_address]
+            time_since_last = current_time - record["last_attempt"]
+
+            if time_since_last < LOCKOUT_WINDOW:
+                if record["attempts"] >= MAX_FAILED_ATTEMPTS:
+                    logging.warning(f"Rate limit exceeded for IP {ip_address}. Blocked AUTH attempt.")
+                    send_response(conn, create_error(104, "Too many failed attempts. Try again later."))
+                    return
+            else:
+                del failed_attempts[ip_address]
 
     if not username or not password:
         send_response(conn, create_error(100, "Username and password are required"))
@@ -88,16 +110,27 @@ def handle_auth(conn, payload):
         token = secrets.token_hex(32)
         create_session(username, token)
 
-        logging.info(f"Successful authentication for user: '{username}'")
+        logging.info(f"Successful authentication for user: '{username}' from IP {ip_address}")
+
+        with rate_limit_lock:
+            if ip_address in failed_attempts:
+                del failed_attempts[ip_address]
 
         send_response(conn, create_message(
             "AUTH_ACK",
             {"message": "Authentication successful", "session_token": token}
         ))
     else:
-        logging.warning(f"Failed authentication attempt for username: '{username}'")
-        send_response(conn, create_error(102, "Authentication failed"))
+        logging.warning(f"Failed authentication attempt for username: '{username}' from IP {ip_address}")
 
+        with rate_limit_lock:
+            if ip_address not in failed_attempts:
+                failed_attempts[ip_address] = {"attempts": 1, "last_attempt": current_time}
+            else:
+                failed_attempts[ip_address]["attempts"] += 1
+                failed_attempts[ip_address]["last_attempt"] = current_time
+
+        send_response(conn, create_error(102, "Authentication failed"))
 
 def handle_add_note(conn, message):
     token = message.get("session_token")
@@ -213,7 +246,7 @@ def handle_client(conn, addr):
                             handle_register(conn, message["payload"])
 
                         elif message_type == "AUTH":
-                            handle_auth(conn, message["payload"])
+                            handle_auth(conn, message["payload"], addr)
 
                         elif message_type == "ADD_NOTE":
                             handle_add_note(conn, message)
