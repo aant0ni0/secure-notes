@@ -3,6 +3,8 @@ import ssl
 import secrets
 import sys
 import os
+import signal
+import threading
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -230,15 +232,38 @@ def start_server():
     context.load_cert_chain(certfile=CERT_FILE, keyfile=KEY_FILE)
 
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
     server_socket.bind((HOST, PORT))
     server_socket.listen(5)
 
     print(f"[INFO] Secure Notes Server running on {HOST}:{PORT}")
 
-    while True:
-        client_socket, addr = server_socket.accept()
-        tls_conn = context.wrap_socket(client_socket, server_side=True)
-        handle_client(tls_conn, addr)
+    def shutdown_handler(signum, frame):
+        print(f"\n[INFO] Otrzymano sygnał systemowy ({signum}). Rozpoczynam Graceful Shutdown...")
+        server_socket.close()
+        print("[INFO] Gniazdo główne zamknięte. Proces serwera zakończony bezpiecznie.")
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, shutdown_handler)
+    signal.signal(signal.SIGTERM, shutdown_handler)
+
+    try:
+        while True:
+
+            client_socket, addr = server_socket.accept()
+            tls_conn = context.wrap_socket(client_socket, server_side=True)
+
+            client_thread = threading.Thread(target=handle_client, args=(tls_conn, addr))
+            client_thread.start()
+
+    except OSError as e:
+        pass
+    except Exception as e:
+        print(f"[KRYTYCZNY BŁĄD SERWERA] Niespodziewany wyjątek w pętli głównej: {e}")
+    finally:
+        server_socket.close()
 
 
 if __name__ == "__main__":
