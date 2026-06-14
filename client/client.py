@@ -2,6 +2,8 @@ import socket
 import ssl
 import sys
 import os
+import time
+import threading
 
 sys.path.append(
     os.path.abspath(
@@ -23,25 +25,21 @@ def receive_message(conn):
             chunk = conn.recv(4096)
 
             if not chunk:
-                return None
+                raise ConnectionError("Serwer zamknął połączenie.")
 
             data += chunk
 
         return decode_message(data.strip())
-    except (ssl.SSLError, ConnectionError) as e:
-        # Przechwytuje m.in. ssl.SSLEOFError oraz ConnectionResetError
-        print(f"\n[KRYTYCZNY BŁĄD SIECI] Utracono połączenie z serwerem podczas odbierania danych: {e}")
-        sys.exit(1)
+    except (ssl.SSLError, ConnectionError, OSError) as e:
+        raise ConnectionError(f"Utracono połączenie podczas odbierania danych: {e}")
 
 
 def send_message(conn, message):
     try:
         conn.sendall(encode_message(message))
         return receive_message(conn)
-    except (ssl.SSLError, ConnectionError, BrokenPipeError) as e:
-        # Przechwytuje próby zapisu do zamkniętego potoku/gniazda
-        print(f"\n[KRYTYCZNY BŁĄD SIECI] Nie można wysłać wiadomości. Serwer jest niedostępny: {e}")
-        sys.exit(1)
+    except (ssl.SSLError, ConnectionError, OSError) as e:
+        raise ConnectionError(f"Utracono potok wysyłania: {e}")
 
 
 def print_response(response):
@@ -65,43 +63,38 @@ def main():
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
 
-    with socket.create_connection((HOST, PORT)) as sock:
-        with context.wrap_socket(sock, server_hostname="localhost") as conn:
-            print("[INFO] Connected to Secure Notes Server")
+    while True:
+        try:
+            with socket.create_connection((HOST, PORT)) as sock:
+                with context.wrap_socket(sock, server_hostname="localhost") as conn:
+                    print("\n[INFO] Connected to Secure Notes Server")
 
-            def heartbeat_task(connection):
-                while True:
-                    time.sleep(45)
-                    try:
-                        ping_msg = create_message("PING")
-                        connection.sendall(encode_message(ping_msg))
-                    except Exception:
-                        break
+                    def heartbeat_task(connection):
+                        while True:
+                            time.sleep(45)
+                            try:
+                                ping_msg = create_message("PING")
+                                connection.sendall(encode_message(ping_msg))
+                            except Exception:
+                                break
 
-            heartbeat_thread = threading.Thread(target=heartbeat_task, args=(conn,), daemon=True)
-            heartbeat_thread.start()
+                    heartbeat_thread = threading.Thread(target=heartbeat_task, args=(conn,), daemon=True)
+                    heartbeat_thread.start()
 
-            response = send_message(conn, create_message(
-                "HELLO",
-                {"client_version": "1.0"}
-            ))
+                    response = send_message(conn, create_message("HELLO", {"client_version": "1.0"}))
+                    print_response(response)
 
-            response = send_message(conn, create_message(
-                "HELLO",
-                {"client_version": "1.0"}
-            ))
-            print_response(response)
+                    # --- WEWNĘTRZNA PĘTLA LOGIKI (MENU) ---
+                    while True:
+                        print("\n=== SECURE NOTES ===")
+                        print("1. Register")
+                        print("2. Login")
+                        print("3. Add note")
+                        print("4. List notes")
+                        print("5. Delete note")
+                        print("6. Exit")
 
-            while True:
-                print("\n=== SECURE NOTES ===")
-                print("1. Register")
-                print("2. Login")
-                print("3. Add note")
-                print("4. List notes")
-                print("5. Delete note")
-                print("6. Exit")
-
-                choice = input("Choose option: ")
+                        choice = input("Choose option: ")
 
                 if choice == "1":
                     username = input("Username: ")
@@ -194,15 +187,24 @@ def main():
                     ))
                     print_response(response)
 
+
                 elif choice == "6":
                     response = send_message(conn, create_message("BYE"))
                     print_response(response)
                     print("Koniec.")
-                    break
+                    return
 
                 else:
                     print("Nieznana opcja.")
 
+        except (ConnectionError, ConnectionRefusedError) as e:
+            print(f"\n[BŁĄD SIECI] {e}")
+            print("[INFO] Próba ponownego połączenia za 5 sekund...")
+            time.sleep(5)
+
+        except KeyboardInterrupt:
+            print("\n[INFO] Przerwano działanie programu przez użytkownika.")
+            break
 
 if __name__ == "__main__":
     main()
