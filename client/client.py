@@ -20,7 +20,7 @@ def receive_message(conn):
     data = b""
 
     while not data.endswith(b"\n"):
-        chunk = co  nn.recv(4096)
+        chunk = conn.recv(4096)
 
         if not chunk:
             return None
