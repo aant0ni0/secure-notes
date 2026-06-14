@@ -5,6 +5,7 @@ import sys
 import os
 import signal
 import threading
+import logging
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -28,6 +29,14 @@ from database import (
     get_username_by_token
 )
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler("server.log", encoding="utf-8"),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 
 HOST = "127.0.0.1"
 PORT = 8443
@@ -77,17 +86,16 @@ def handle_auth(conn, payload):
 
     if verify_user(username, password):
         token = secrets.token_hex(32)
-
         create_session(username, token)
+
+        logging.info(f"Successful authentication for user: '{username}'")
 
         send_response(conn, create_message(
             "AUTH_ACK",
-            {
-                "message": "Authentication successful",
-                "session_token": token
-            }
+            {"message": "Authentication successful", "session_token": token}
         ))
     else:
+        logging.warning(f"Failed authentication attempt for username: '{username}'")
         send_response(conn, create_error(102, "Authentication failed"))
 
 
@@ -96,6 +104,7 @@ def handle_add_note(conn, message):
     username = get_username_from_token(token)
 
     if not username:
+        logging.warning("Unauthorized request to ADD_NOTE (invalid or missing token)")
         send_response(conn, create_error(103, "Authorization failed"))
         return
 
@@ -127,6 +136,7 @@ def handle_list_notes(conn, message):
     username = get_username_from_token(token)
 
     if not username:
+        logging.warning("Unauthorized request to ADD_NOTE (invalid or missing token)")
         send_response(conn, create_error(103, "Authorization failed"))
         return
 
@@ -145,6 +155,7 @@ def handle_delete_note(conn, message):
     username = get_username_from_token(token)
 
     if not username:
+        logging.warning("Unauthorized request to ADD_NOTE (invalid or missing token)")
         send_response(conn, create_error(103, "Authorization failed"))
         return
 
@@ -167,7 +178,7 @@ def handle_delete_note(conn, message):
 
 
 def handle_client(conn, addr):
-    print(f"[INFO] Connected: {addr}")
+    logging.info(f"Connected: {addr}")
 
     try:
         with conn:
@@ -177,7 +188,7 @@ def handle_client(conn, addr):
                 data = conn.recv(4096)
 
                 if not data:
-                    print(f"[INFO] Disconnected: {addr}")
+                    logging.info(f"Disconnected: {addr}")
                     break
 
                 buffer += data
@@ -191,7 +202,7 @@ def handle_client(conn, addr):
 
                         message_type = message["type"]
 
-                        print(f"[RECV] {message_type} from {addr}")
+                        logging.info(f"RECV {message_type} from {addr}")
 
                         if message_type == "HELLO":
                             handle_hello(conn)
@@ -219,10 +230,11 @@ def handle_client(conn, addr):
                             send_response(conn, create_error(101, "Unknown message type"))
 
                     except ValueError as e:
+                        logging.warning(f"Invalid message format from {addr}: {e}")
                         send_response(conn, create_error(100, str(e)))
 
     except Exception as e:
-        print(f"[ERROR] Client error {addr}: {e}")
+        logging.error(f"Client error {addr}: {e}")
 
 
 def start_server():
@@ -239,12 +251,13 @@ def start_server():
     server_socket.bind((HOST, PORT))
     server_socket.listen(5)
 
-    print(f"[INFO] Secure Notes Server running on {HOST}:{PORT}")
+    logging.info(f"Secure Notes Server running on {HOST}:{PORT}")
+
 
     def shutdown_handler(signum, frame):
-        print(f"\n[INFO] Otrzymano sygnał systemowy ({signum}). Rozpoczynam Graceful Shutdown...")
+        logging.info(f"Otrzymano sygnał systemowy ({signum}). Rozpoczynam Graceful Shutdown...")
         server_socket.close()
-        print("[INFO] Gniazdo główne zamknięte. Proces serwera zakończony bezpiecznie.")
+        logging.info("Gniazdo główne zamknięte. Proces serwera zakończony bezpiecznie.")
         sys.exit(0)
 
     signal.signal(signal.SIGINT, shutdown_handler)
@@ -262,7 +275,7 @@ def start_server():
     except OSError as e:
         pass
     except Exception as e:
-        print(f"[KRYTYCZNY BŁĄD SERWERA] Niespodziewany wyjątek w pętli głównej: {e}")
+        logging.critical(f"Niespodziewany wyjątek w pętli głównej: {e}")
     finally:
         server_socket.close()
 
