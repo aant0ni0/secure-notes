@@ -27,7 +27,8 @@ from database import (
     list_notes,
     delete_note,
     create_session,
-    get_username_by_token
+    get_username_by_token,
+    delete_session
 )
 
 logging.basicConfig(
@@ -260,7 +261,12 @@ def handle_client(conn, addr):
                         elif message_type == "PING":
                             logging.debug(f"Otrzymano sygnał Keep-Alive od {addr}")
 
+
                         elif message_type == "BYE":
+                            token = message.get("session_token")
+                            if token:
+                                delete_session(token)
+                                logging.info(f"Usunięto token sesyjny z bazy (Wylogowanie).")
                             send_response(conn, create_message("BYE_ACK", {"message": "Goodbye"}))
                             return
 

@@ -202,7 +202,7 @@ def get_username_by_token(token):
     cursor = conn.cursor()
 
     cursor.execute(
-        "SELECT username FROM sessions WHERE token = ?",
+        "SELECT username FROM sessions WHERE token = ? AND datetime(created_at) >= datetime('now', '-24 hours')",
         (token,)
     )
 
@@ -214,6 +214,17 @@ def get_username_by_token(token):
 
     return row[0]
 
+def delete_session(token):
+    """
+    Trwale usuwa token sesyjny z bazy danych (Invalidation).
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("DELETE FROM sessions WHERE token = ?", (token,))
+
+    conn.commit()
+    conn.close()
 
 if __name__ == "__main__":
     init_db()

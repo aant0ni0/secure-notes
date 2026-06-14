@@ -188,8 +188,13 @@ def main():
                     print_response(response)
 
 
+
                 elif choice == "6":
-                    response = send_message(conn, create_message("BYE"))
+                    response = send_message(conn, create_message(
+                        "BYE",
+                        session_token=session_token
+
+                    ))
                     print_response(response)
                     print("Koniec.")
                     return
