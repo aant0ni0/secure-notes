@@ -180,6 +180,8 @@ def handle_delete_note(conn, message):
 def handle_client(conn, addr):
     logging.info(f"Connected: {addr}")
 
+    conn.settimeout(60.0)
+
     try:
         with conn:
             buffer = b""
@@ -222,6 +224,9 @@ def handle_client(conn, addr):
                         elif message_type == "DELETE_NOTE":
                             handle_delete_note(conn, message)
 
+                        elif message_type == "PING":
+                            logging.debug(f"Otrzymano sygnał Keep-Alive od {addr}")
+
                         elif message_type == "BYE":
                             send_response(conn, create_message("BYE_ACK", {"message": "Goodbye"}))
                             return
@@ -233,6 +238,8 @@ def handle_client(conn, addr):
                         logging.warning(f"Invalid message format from {addr}: {e}")
                         send_response(conn, create_error(100, str(e)))
 
+    except socket.timeout:
+        logging.warning(f"Timeout połączenia dla {addr} (Brak aktywności przez 60s). Rozłączanie (UC6).")
     except Exception as e:
         logging.error(f"Client error {addr}: {e}")
 

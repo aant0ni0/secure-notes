@@ -18,21 +18,30 @@ PORT = 8443
 
 def receive_message(conn):
     data = b""
+    try:
+        while not data.endswith(b"\n"):
+            chunk = conn.recv(4096)
 
-    while not data.endswith(b"\n"):
-        chunk = conn.recv(4096)
+            if not chunk:
+                return None
 
-        if not chunk:
-            return None
+            data += chunk
 
-        data += chunk
-
-    return decode_message(data.strip())
+        return decode_message(data.strip())
+    except (ssl.SSLError, ConnectionError) as e:
+        # Przechwytuje m.in. ssl.SSLEOFError oraz ConnectionResetError
+        print(f"\n[KRYTYCZNY BŁĄD SIECI] Utracono połączenie z serwerem podczas odbierania danych: {e}")
+        sys.exit(1)
 
 
 def send_message(conn, message):
-    conn.sendall(encode_message(message))
-    return receive_message(conn)
+    try:
+        conn.sendall(encode_message(message))
+        return receive_message(conn)
+    except (ssl.SSLError, ConnectionError, BrokenPipeError) as e:
+        # Przechwytuje próby zapisu do zamkniętego potoku/gniazda
+        print(f"\n[KRYTYCZNY BŁĄD SIECI] Nie można wysłać wiadomości. Serwer jest niedostępny: {e}")
+        sys.exit(1)
 
 
 def print_response(response):
@@ -59,6 +68,23 @@ def main():
     with socket.create_connection((HOST, PORT)) as sock:
         with context.wrap_socket(sock, server_hostname="localhost") as conn:
             print("[INFO] Connected to Secure Notes Server")
+
+            def heartbeat_task(connection):
+                while True:
+                    time.sleep(45)
+                    try:
+                        ping_msg = create_message("PING")
+                        connection.sendall(encode_message(ping_msg))
+                    except Exception:
+                        break
+
+            heartbeat_thread = threading.Thread(target=heartbeat_task, args=(conn,), daemon=True)
+            heartbeat_thread.start()
+
+            response = send_message(conn, create_message(
+                "HELLO",
+                {"client_version": "1.0"}
+            ))
 
             response = send_message(conn, create_message(
                 "HELLO",
