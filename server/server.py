@@ -46,12 +46,13 @@ PORT = 8443
 CERT_FILE = "certs/server.crt"
 KEY_FILE = "certs/server.key"
 
-# --- KONFIGURACJA RATE LIMITINGU ---
+# Konfiguracja rate limitingu
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_WINDOW = 60
 
 failed_attempts = {}
 rate_limit_lock = threading.Lock()
+
 
 def send_response(conn, message):
     conn.sendall(encode_message(message))
@@ -75,13 +76,13 @@ def handle_register(conn, payload):
     password = payload.get("password")
 
     if not username or not password:
-        send_response(conn, create_error(100, "Username and password are required"))
+        send_response(conn, create_error(100, "Wymagana nazwa użytkownika i hasło"))
         return
 
     if create_user(username, password):
-        send_response(conn, create_message("REGISTER_ACK", {"message": "User created"}))
+        send_response(conn, create_message("REGISTER_ACK", {"message": "Użytkownik utworzony"}))
     else:
-        send_response(conn, create_error(100, "Username already exists"))
+        send_response(conn, create_error(100, "Nazwa użytkownika jest już zajęta"))
 
 
 def handle_auth(conn, payload, addr):
@@ -97,21 +98,21 @@ def handle_auth(conn, payload, addr):
 
             if time_since_last < LOCKOUT_WINDOW:
                 if record["attempts"] >= MAX_FAILED_ATTEMPTS:
-                    logging.warning(f"Rate limit exceeded for IP {ip_address}. Blocked AUTH attempt.")
-                    send_response(conn, create_error(104, "Too many failed attempts. Try again later."))
+                    logging.warning(f"Przekroczono limit prób logowania dla IP {ip_address}.")
+                    send_response(conn, create_error(104, "Zbyt wiele nieudanych prób. Spróbuj ponownie później."))
                     return
             else:
                 del failed_attempts[ip_address]
 
     if not username or not password:
-        send_response(conn, create_error(100, "Username and password are required"))
+        send_response(conn, create_error(100, "Wymagana nazwa użytkownika i hasło"))
         return
 
     if verify_user(username, password):
         token = secrets.token_hex(32)
         create_session(username, token)
 
-        logging.info(f"Successful authentication for user: '{username}' from IP {ip_address}")
+        logging.info(f"Użytkownik '{username}' zalogował się pomyślnie (IP: {ip_address})")
 
         with rate_limit_lock:
             if ip_address in failed_attempts:
@@ -119,10 +120,10 @@ def handle_auth(conn, payload, addr):
 
         send_response(conn, create_message(
             "AUTH_ACK",
-            {"message": "Authentication successful", "session_token": token}
+            {"message": "Uwierzytelnienie zakończone sukcesem", "session_token": token}
         ))
     else:
-        logging.warning(f"Failed authentication attempt for username: '{username}' from IP {ip_address}")
+        logging.warning(f"Nieudana próba logowania dla użytkownika '{username}' (IP: {ip_address})")
 
         with rate_limit_lock:
             if ip_address not in failed_attempts:
@@ -131,15 +132,16 @@ def handle_auth(conn, payload, addr):
                 failed_attempts[ip_address]["attempts"] += 1
                 failed_attempts[ip_address]["last_attempt"] = current_time
 
-        send_response(conn, create_error(102, "Authentication failed"))
+        send_response(conn, create_error(102, "Błędna nazwa użytkownika lub hasło"))
+
 
 def handle_add_note(conn, message):
     token = message.get("session_token")
     username = get_username_from_token(token)
 
     if not username:
-        logging.warning("Unauthorized request to ADD_NOTE (invalid or missing token)")
-        send_response(conn, create_error(103, "Authorization failed"))
+        logging.warning("Nieautoryzowane żądanie ADD_NOTE (brak lub nieprawidłowy token)")
+        send_response(conn, create_error(103, "Brak autoryzacji"))
         return
 
     payload = message["payload"]
@@ -147,11 +149,11 @@ def handle_add_note(conn, message):
     content = payload.get("content")
 
     if not title or not content:
-        send_response(conn, create_error(100, "Title and content are required"))
+        send_response(conn, create_error(100, "Tytuł i treść są wymagane"))
         return
 
     if len(title) > 100 or len(content) > 2000:
-        send_response(conn, create_error(100, "Note is too long"))
+        send_response(conn, create_error(100, "Notatka jest zbyt długa"))
         return
 
     note_id = add_note(username, title, content)
@@ -159,7 +161,7 @@ def handle_add_note(conn, message):
     send_response(conn, create_message(
         "SUCCESS",
         {
-            "message": "Note added",
+            "message": "Notatka dodana",
             "note_id": note_id
         }
     ))
@@ -170,8 +172,8 @@ def handle_list_notes(conn, message):
     username = get_username_from_token(token)
 
     if not username:
-        logging.warning("Unauthorized request to ADD_NOTE (invalid or missing token)")
-        send_response(conn, create_error(103, "Authorization failed"))
+        logging.warning("Nieautoryzowane żądanie LIST_NOTES (brak lub nieprawidłowy token)")
+        send_response(conn, create_error(103, "Brak autoryzacji"))
         return
 
     notes = list_notes(username)
@@ -189,30 +191,30 @@ def handle_delete_note(conn, message):
     username = get_username_from_token(token)
 
     if not username:
-        logging.warning("Unauthorized request to ADD_NOTE (invalid or missing token)")
-        send_response(conn, create_error(103, "Authorization failed"))
+        logging.warning("Nieautoryzowane żądanie DELETE_NOTE (brak lub nieprawidłowy token)")
+        send_response(conn, create_error(103, "Brak autoryzacji"))
         return
 
     note_id = message["payload"].get("note_id")
 
     if not note_id:
-        send_response(conn, create_error(100, "note_id is required"))
+        send_response(conn, create_error(100, "Pole note_id jest wymagane"))
         return
 
     try:
         note_id = int(note_id)
     except ValueError:
-        send_response(conn, create_error(100, "note_id must be integer"))
+        send_response(conn, create_error(100, "Pole note_id musi być liczbą całkowitą"))
         return
 
     if delete_note(username, note_id):
-        send_response(conn, create_message("SUCCESS", {"message": "Note deleted"}))
+        send_response(conn, create_message("SUCCESS", {"message": "Notatka usunięta"}))
     else:
-        send_response(conn, create_error(107, "Note not found"))
+        send_response(conn, create_error(107, "Notatka nie została znaleziona"))
 
 
 def handle_client(conn, addr):
-    logging.info(f"Connected: {addr}")
+    logging.info(f"Nowe połączenie: {addr}")
 
     conn.settimeout(60.0)
 
@@ -224,7 +226,7 @@ def handle_client(conn, addr):
                 data = conn.recv(4096)
 
                 if not data:
-                    logging.info(f"Disconnected: {addr}")
+                    logging.info(f"Rozłączono: {addr}")
                     break
 
                 buffer += data
@@ -238,7 +240,7 @@ def handle_client(conn, addr):
 
                         message_type = message["type"]
 
-                        logging.info(f"RECV {message_type} from {addr}")
+                        logging.info(f"Odebrano {message_type} od {addr}")
 
                         if message_type == "HELLO":
                             handle_hello(conn)
@@ -261,26 +263,25 @@ def handle_client(conn, addr):
                         elif message_type == "PING":
                             logging.debug(f"Otrzymano sygnał Keep-Alive od {addr}")
 
-
                         elif message_type == "BYE":
                             token = message.get("session_token")
                             if token:
                                 delete_session(token)
-                                logging.info(f"Usunięto token sesyjny z bazy (Wylogowanie).")
-                            send_response(conn, create_message("BYE_ACK", {"message": "Goodbye"}))
+                                logging.info("Usunięto token sesji użytkownika (wylogowanie).")
+                            send_response(conn, create_message("BYE_ACK", {"message": "Do widzenia"}))
                             return
 
                         else:
-                            send_response(conn, create_error(101, "Unknown message type"))
+                            send_response(conn, create_error(101, "Nieznany typ wiadomości"))
 
                     except ValueError as e:
-                        logging.warning(f"Invalid message format from {addr}: {e}")
+                        logging.warning(f"Nieprawidłowy format wiadomości od {addr}: {e}")
                         send_response(conn, create_error(100, str(e)))
 
     except socket.timeout:
-        logging.warning(f"Timeout połączenia dla {addr} (Brak aktywności przez 60s). Rozłączanie (UC6).")
+        logging.warning(f"Przekroczono limit czasu połączenia dla {addr} (brak aktywności przez 60s).")
     except Exception as e:
-        logging.error(f"Client error {addr}: {e}")
+        logging.error(f"Błąd klienta {addr}: {e}")
 
 
 def start_server():
@@ -291,19 +292,16 @@ def start_server():
     context.load_cert_chain(certfile=CERT_FILE, keyfile=KEY_FILE)
 
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
     server_socket.bind((HOST, PORT))
     server_socket.listen(5)
 
-    logging.info(f"Secure Notes Server running on {HOST}:{PORT}")
-
+    logging.info(f"Serwer Secure Notes uruchomiony na {HOST}:{PORT}")
 
     def shutdown_handler(signum, frame):
-        logging.info(f"Otrzymano sygnał systemowy ({signum}). Rozpoczynam Graceful Shutdown...")
+        logging.info(f"Otrzymano sygnał systemowy ({signum}). Rozpoczynam bezpieczne zamknięcie...")
         server_socket.close()
-        logging.info("Gniazdo główne zamknięte. Proces serwera zakończony bezpiecznie.")
+        logging.info("Gniazdo główne zamknięte. Serwer zakończył działanie.")
         sys.exit(0)
 
     signal.signal(signal.SIGINT, shutdown_handler)
@@ -311,14 +309,13 @@ def start_server():
 
     try:
         while True:
-
             client_socket, addr = server_socket.accept()
             tls_conn = context.wrap_socket(client_socket, server_side=True)
 
             client_thread = threading.Thread(target=handle_client, args=(tls_conn, addr))
             client_thread.start()
 
-    except OSError as e:
+    except OSError:
         pass
     except Exception as e:
         logging.critical(f"Niespodziewany wyjątek w pętli głównej: {e}")

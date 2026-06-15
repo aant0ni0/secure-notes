@@ -6,9 +6,7 @@ MAX_MESSAGE_SIZE = 8192
 
 
 def create_message(message_type, payload=None, session_token=None):
-    """
-    Tworzy standardową wiadomość protokołu SNP.
-    """
+    """Tworzy standardową wiadomość protokołu SNP."""
     return {
         "type": message_type,
         "msg_id": str(uuid.uuid4()),
@@ -19,9 +17,7 @@ def create_message(message_type, payload=None, session_token=None):
 
 
 def create_error(code, message):
-    """
-    Tworzy wiadomość błędu.
-    """
+    """Tworzy wiadomość błędu protokołu SNP."""
     return create_message(
         "ERROR",
         {
@@ -32,54 +28,47 @@ def create_error(code, message):
 
 
 def encode_message(message):
-    """
-    Zamienia słownik Python na JSON bytes.
-    Dodajemy znak nowej linii jako separator wiadomości.
-    """
+    """Serializuje wiadomość do JSON i dodaje znak nowej linii jako separator."""
     data = json.dumps(message).encode("utf-8") + b"\n"
 
     if len(data) > MAX_MESSAGE_SIZE:
-        raise ValueError("Message too large")
+        raise ValueError("Wiadomość jest zbyt duża")
 
     return data
 
 
 def decode_message(raw_data):
-    """
-    Zamienia odebrane bytes na słownik Python.
-    """
+    """Deserializuje odebrane bajty do słownika Python."""
     if len(raw_data) > MAX_MESSAGE_SIZE:
-        raise ValueError("Message too large")
+        raise ValueError("Wiadomość jest zbyt duża")
 
     try:
         return json.loads(raw_data.decode("utf-8"))
     except json.JSONDecodeError:
-        raise ValueError("Invalid JSON format")
+        raise ValueError("Nieprawidłowy format JSON")
 
 
 def validate_message(message):
-    """
-    Sprawdza, czy wiadomość ma wymagane pola.
-    """
+    """Sprawdza czy wiadomość zawiera wszystkie wymagane pola protokołu SNP."""
     required_fields = ["type", "msg_id", "timestamp", "payload"]
 
     if not isinstance(message, dict):
-        raise ValueError("Message must be JSON object")
+        raise ValueError("Wiadomość musi być obiektem JSON")
 
     for field in required_fields:
         if field not in message:
-            raise ValueError(f"Missing required field: {field}")
+            raise ValueError(f"Brakujące pole: {field}")
 
     if not isinstance(message["type"], str):
-        raise ValueError("Field 'type' must be string")
+        raise ValueError("Pole 'type' musi być ciągiem znaków")
 
     if not isinstance(message["msg_id"], str):
-        raise ValueError("Field 'msg_id' must be string")
+        raise ValueError("Pole 'msg_id' musi być ciągiem znaków")
 
     if not isinstance(message["timestamp"], int):
-        raise ValueError("Field 'timestamp' must be integer")
+        raise ValueError("Pole 'timestamp' musi być liczbą całkowitą")
 
     if not isinstance(message["payload"], dict):
-        raise ValueError("Field 'payload' must be object")
+        raise ValueError("Pole 'payload' musi być obiektem")
 
     return True

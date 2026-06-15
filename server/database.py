@@ -9,17 +9,12 @@ def get_connection():
 
 
 def hash_password(password):
-    """
-    Haszuje hasło użytkownika.
-    W projekcie pokazuje, że nie przechowujemy hasła jawnym tekstem.
-    """
+    """Haszuje hasło użytkownika algorytmem SHA-256."""
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 
 def init_db():
-    """
-    Tworzy tabele users, notes oraz sessions.
-    """
+    """Tworzy tabele users, notes oraz sessions jeśli nie istnieją."""
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -50,16 +45,13 @@ def init_db():
             FOREIGN KEY (username) REFERENCES users(username)
         )
     """)
-    # ---------------------------
 
     conn.commit()
     conn.close()
 
 
 def create_user(username, password):
-    """
-    Dodaje nowego użytkownika.
-    """
+    """Dodaje nowego użytkownika do bazy danych."""
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -77,9 +69,7 @@ def create_user(username, password):
 
 
 def verify_user(username, password):
-    """
-    Sprawdza login i hasło.
-    """
+    """Sprawdza poprawność loginu i hasła."""
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -99,18 +89,12 @@ def verify_user(username, password):
 
 
 def create_default_user():
-    """
-    Tworzy testowego użytkownika:
-    login: test
-    hasło: test123
-    """
+    """Tworzy domyślnego użytkownika testowego (test / test123)."""
     create_user("test", "test123")
 
 
 def add_note(username, title, content):
-    """
-    Dodaje notatkę przypisaną do użytkownika.
-    """
+    """Dodaje notatkę przypisaną do użytkownika."""
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -127,9 +111,7 @@ def add_note(username, title, content):
 
 
 def list_notes(username):
-    """
-    Zwraca listę notatek danego użytkownika.
-    """
+    """Zwraca listę notatek danego użytkownika, posortowaną od najnowszej."""
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -160,9 +142,7 @@ def list_notes(username):
 
 
 def delete_note(username, note_id):
-    """
-    Usuwa notatkę tylko wtedy, gdy należy do danego użytkownika.
-    """
+    """Usuwa notatkę tylko wtedy, gdy należy do danego użytkownika."""
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -179,9 +159,7 @@ def delete_note(username, note_id):
 
 
 def create_session(username, token):
-    """
-    Zapisuje nowy token sesyjny w bazie danych.
-    """
+    """Zapisuje nowy token sesji w bazie danych."""
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -195,9 +173,7 @@ def create_session(username, token):
 
 
 def get_username_by_token(token):
-    """
-    Sprawdza, czy token istnieje w bazie i zwraca przypisanego użytkownika.
-    """
+    """Zwraca nazwę użytkownika powiązaną z tokenem sesji (ważnym przez 24h)."""
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -214,10 +190,9 @@ def get_username_by_token(token):
 
     return row[0]
 
+
 def delete_session(token):
-    """
-    Trwale usuwa token sesyjny z bazy danych (Invalidation).
-    """
+    """Usuwa token sesji z bazy danych."""
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -226,8 +201,9 @@ def delete_session(token):
     conn.commit()
     conn.close()
 
+
 if __name__ == "__main__":
     init_db()
     create_default_user()
-    print("Database initialized.")
-    print("Default user: test / test123")
+    print("Baza danych zainicjalizowana.")
+    print("Domyślny użytkownik: test / test123")
